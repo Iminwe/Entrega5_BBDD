@@ -1,17 +1,19 @@
 
-const {User, Quiz} = require("./model.js").models;
+const { User, Quiz, Score } = require("./model.js").models;
+const sequelize = require("./model.js");
 
 // Show all quizzes in DB including <id> and <author>
-exports.list = async (rl) =>  {
+exports.list = async (rl) => {
 
   let quizzes = await Quiz.findAll(
-    { include: [{
+    {
+      include: [{
         model: User,
         as: 'author'
       }]
     }
   );
-  quizzes.forEach( 
+  quizzes.forEach(
     q => rl.log(`  "${q.question}" (by ${q.author.name}, id=${q.id})`)
   );
 }
@@ -20,22 +22,23 @@ exports.list = async (rl) =>  {
 exports.create = async (rl) => {
 
   let name = await rl.questionP("Enter user");
-    let user = await User.findOne({where: {name}});
-    if (!user) throw new Error(`User ('${name}') doesn't exist!`);
+  let user = await User.findOne({ where: { name } });
+  if (!user) throw new Error(`User ('${name}') doesn't exist!`);
 
-    let question = await rl.questionP("Enter question");
-    if (!question) throw new Error("Response can't be empty!");
+  let question = await rl.questionP("Enter question");
+  if (!question) throw new Error("Response can't be empty!");
 
-    let answer = await rl.questionP("Enter answer");
-    if (!answer) throw new Error("Response can't be empty!");
+  let answer = await rl.questionP("Enter answer");
+  if (!answer) throw new Error("Response can't be empty!");
 
-    await Quiz.create( 
-      { question,
-        answer, 
-        authorId: user.id
-      }
-    );
-    rl.log(`   User ${name} creates quiz: ${question} -> ${answer}`);
+  await Quiz.create(
+    {
+      question,
+      answer,
+      authorId: user.id
+    }
+  );
+  rl.log(`   User ${name} creates quiz: ${question} -> ${answer}`);
 }
 
 // Test (play) quiz identified by <id>
@@ -47,7 +50,7 @@ exports.test = async (rl) => {
 
   let answered = await rl.questionP(quiz.question);
 
-  if (answered.toLowerCase().trim()===quiz.answer.toLowerCase().trim()) {
+  if (answered.toLowerCase().trim() === quiz.answer.toLowerCase().trim()) {
     rl.log(`  The answer "${answered}" is right!`);
   } else {
     rl.log(`  The answer "${answered}" is wrong!`);
@@ -68,7 +71,7 @@ exports.update = async (rl) => {
 
   quiz.question = question;
   quiz.answer = answer;
-  await quiz.save({fields: ["question", "answer"]});
+  await quiz.save({ fields: ["question", "answer"] });
 
   rl.log(`  Quiz ${id} updated to: ${question} -> ${answer}`);
 }
@@ -77,9 +80,45 @@ exports.update = async (rl) => {
 exports.delete = async (rl) => {
 
   let id = await rl.questionP("Enter quiz Id");
-  let n = await Quiz.destroy({where: {id}});
-  
-  if (n===0) throw new Error(`  ${id} not in DB`);
+  let n = await Quiz.destroy({ where: { id } });
+
+  if (n === 0) throw new Error(`  ${id} not in DB`);
   rl.log(`  ${id} deleted from DB`);
 }
 
+exports.play = async (rl) => {
+
+  let quizzes = await Quiz.findAll({ order: sequelize.random() });
+  let score = 0;
+
+  for (var q of quizzes) {
+    let response = await rl.questionP(q.question);
+    if (response.toLowerCase().trim() === q.answer.toLowerCase().trim()) {
+      rl.log(`The answer ${response} is right!`);
+      score++;
+    } else {
+      rl.log(`The answer ${response} is wrong!`);
+      break;
+    }
+  }
+  rl.log(`Score: ${score}`);
+  // console.log('FUNCIONA!', quizzes);
+  let name = await rl.questionP('Escribe tu nombre de usuario');
+  let user = await User.findOne({ where: { name: name } });
+  if (!user){
+    user = await User.create({name: name, age: 0});
+  }
+  await Score.create ({wins: score, userId: user.id});
+}
+
+exports.listScore = async (rl) => {
+  let scores = await Score.findAll({
+    include: {
+      model: User, as: 'player'
+    }, 
+    order: [['wins', 'DESC']] });
+  for (s of scores){
+    rl.log (`${s.player.name}|${s.wins}|${s.createdAt.toUTCString()}`);
+  }
+  
+}
